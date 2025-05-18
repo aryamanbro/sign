@@ -24,7 +24,7 @@ no_sequences = st.sidebar.slider("Sequences per action", 5, 100, 30)
 sequence_length = st.sidebar.slider("Frames per sequence", 10, 60, 30)
 epochs = st.sidebar.slider("Epochs", 10, 300, 200)
 data_path = st.sidebar.text_input("Data Path", value="MP_Data")
-model_path = st.sidebar.text_input("Model Path", value="action.h5")
+model_path = st.sidebar.text_input("Model Path", value="action.keras")
 
 # Main buttons
 col1, col2, col3 = st.columns(3)
