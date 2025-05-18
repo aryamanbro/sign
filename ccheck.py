@@ -147,7 +147,7 @@ def load_data(DATA_PATH, actions, no_sequences, sequence_length):
 # 4. Model Training Function
 # ---------------------------
 
-def train_model(X, y, epochs, log_dir="Logs", model_path="action.h5", mapping_path="label_mapping.npy"):
+def train_model(X, y, epochs, log_dir="Logs", model_path="action.keras", mapping_path="label_mapping.npy"):
     """Builds, trains, and saves an LSTM model."""
     # Split the data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.05)
@@ -247,7 +247,7 @@ if __name__ == '_main_':
     parser.add_argument("--sequence_length", type=int, default=30, help="Number of frames per sequence")
     parser.add_argument("--epochs", type=int, default=2000, help="Number of training epochs")
     parser.add_argument("--data_path", type=str, default="MP_Data", help="Path to save/load data")
-    parser.add_argument("--model_path", type=str, default="action.h5", help="Path to save/load model")
+    parser.add_argument("--model_path", type=str, default="action.keras", help="Path to save/load model")
     args = parser.parse_args()
     
     # Create folders for data collection if mode is 'collect'
