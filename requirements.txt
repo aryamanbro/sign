@@ -5,3 +5,4 @@ mediapipe
 streamlit
 tensorflow
 scikit-learn
+streamlit_webrtc
