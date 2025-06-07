@@ -12,8 +12,7 @@ from ccheck import (
     real_time_prediction,
     KeypointCollector
 )
-create_data_folders(MP_Data, actions, no_sequences)
-collector = KeypointCollector(data_path, actions, no_sequences, sequence_length)
+
 
 
 st.set_page_config(layout="wide")
@@ -35,6 +34,8 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("📹 Collect Data"):
+        create_data_folders(data_path, actions, no_sequences)
+        collector = KeypointCollector(data_path, actions, no_sequences, sequence_length)
         collector.start_collection(actions.index(selected_action))
 
         webrtc_streamer(
