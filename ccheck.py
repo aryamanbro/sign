@@ -1,27 +1,24 @@
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import av
 import cv2
 import numpy as np
-import os
-import argparse
-import time
-from matplotlib import pyplot as plt
 import mediapipe as mp
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.callbacks import TensorBoard
-from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
+from tensorflow.keras.models import load_model
 
-# ---------------------------
-# 1. Setup and Helper Functions
-# ---------------------------
+# Load model and action labels
+model = load_model("action.h5")  # Replace with your model path
+actions = np.array(["hello", "thanks", "yes", "no"])  # Replace with your action labels
+sequence = []
+sequence_length = 30
+threshold = 0.8
 
-# Initialize MediaPipe modules
-mp_holistic = mp.solutions.holistic       # Holistic model for face, pose, hands
-mp_drawing = mp.solutions.drawing_utils    # Drawing utilities
+# Initialize MediaPipe
+mp_holistic = mp.solutions.holistic
+mp_drawing = mp.solutions.drawing_utils
+
 
 def mediapipe_detection(image, model):
-    """Convert the BGR image to RGB, process with MediaPipe and revert to BGR."""
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image.flags.writeable = False
     results = model.process(image)
@@ -29,120 +26,56 @@ def mediapipe_detection(image, model):
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     return image, results
 
+
 def draw_styled_landmarks(image, results):
-    """Draw styled landmarks for face, pose, and hands."""
-    # Face
     mp_drawing.draw_landmarks(
-        image, results.face_landmarks, mp.solutions.face_mesh.FACEMESH_TESSELATION, 
-        mp_drawing.DrawingSpec(color=(80,110,10), thickness=1, circle_radius=1), 
-        mp_drawing.DrawingSpec(color=(80,256,121), thickness=1, circle_radius=1)
-    ) 
-    # Pose
+        image, results.face_landmarks, mp.solutions.face_mesh.FACEMESH_TESSELATION)
     mp_drawing.draw_landmarks(
-        image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
-        mp_drawing.DrawingSpec(color=(80,22,10), thickness=2, circle_radius=4), 
-        mp_drawing.DrawingSpec(color=(80,44,121), thickness=2, circle_radius=2)
-    ) 
-    # Left Hand
+        image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
     mp_drawing.draw_landmarks(
-        image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-        mp_drawing.DrawingSpec(color=(121,22,76), thickness=2, circle_radius=4), 
-        mp_drawing.DrawingSpec(color=(121,44,250), thickness=2, circle_radius=2)
-    ) 
-    # Right Hand  
+        image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
     mp_drawing.draw_landmarks(
-        image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-        mp_drawing.DrawingSpec(color=(245,117,66), thickness=2, circle_radius=4), 
-        mp_drawing.DrawingSpec(color=(245,66,230), thickness=2, circle_radius=2)
-    )
+        image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+
 
 def extract_keypoints(results):
-    """Extract keypoints from pose, face, left and right hands."""
-    pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(33*4)
-    face = np.array([[res.x, res.y, res.z] for res in results.face_landmarks.landmark]).flatten() if results.face_landmarks else np.zeros(468*3)
-    lh = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(21*3)
-    rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21*3)
+    pose = np.array([[res.x, res.y, res.z, res.visibility] for res in
+                     results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(33 * 4)
+    face = np.array([[res.x, res.y, res.z] for res in
+                     results.face_landmarks.landmark]).flatten() if results.face_landmarks else np.zeros(468 * 3)
+    lh = np.array([[res.x, res.y, res.z] for res in
+                   results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(21 * 3)
+    rh = np.array([[res.x, res.y, res.z] for res in
+                   results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21 * 3)
     return np.concatenate([pose, face, lh, rh])
 
-def create_data_folders(DATA_PATH, actions, no_sequences):
-    """Create folders for each action and sequence if they don't exist."""
-    for action in actions:
-        for sequence in range(no_sequences):
-            folder_path = os.path.join(DATA_PATH, action, str(sequence))
-            os.makedirs(folder_path, exist_ok=True)
-            
-# ---------------------------
-# 2. Data Collection Function
-# ---------------------------
 
-def collect_data(DATA_PATH, actions, no_sequences, sequence_length):
-    """
-    Collects keypoint data from the webcam for each action.
-    For each action, it records 'no_sequences' videos, each of 'sequence_length' frames.
-    """
-    cap = cv2.VideoCapture(0)
-    with mp_holistic.Holistic(min_detection_confidence=0.5, 
-                              min_tracking_confidence=0.5) as holistic:
-        # Loop through actions and sequences
-        for action in actions:
-            for sequence in range(no_sequences):
-                print(f"Starting collection for '{action}', sequence {sequence}")
-                # Wait before starting collection for each sequence
-                for frame_num in range(sequence_length):
-                    ret, frame = cap.read()
-                    if not ret:
-                        continue
+class SignLanguageTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.sequence = []
+        self.last_action = ""
+        self.holistic = mp_holistic.Holistic(min_detection_confidence=0.5,
+                                             min_tracking_confidence=0.5)
 
-                    # Make detections
-                    image, results = mediapipe_detection(frame, holistic)
-                    draw_styled_landmarks(image, results)
-                    
-                    # Display collection info
-                    if frame_num == 0:
-                        cv2.putText(image, 'STARTING COLLECTION', (120,200), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255, 0), 4, cv2.LINE_AA)
-                        cv2.putText(image, f'Collecting frames for {action} Video Number {sequence}', (15,12), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1, cv2.LINE_AA)
-                        cv2.imshow('Data Collection', image)
-                        cv2.waitKey(2000)
-                    else:
-                        cv2.putText(image, f'Collecting frames for {action} Video Number {sequence}', (15,12), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1, cv2.LINE_AA)
-                        cv2.imshow('Data Collection', image)
-                    
-                    # Extract and save keypoints
-                    keypoints = extract_keypoints(results)
-                    npy_path = os.path.join(DATA_PATH, action, str(sequence), f"{frame_num}.npy")
-                    np.save(npy_path, keypoints)
+    def transform(self, frame):
+        image = frame.to_ndarray(format="bgr24")
+        image, results = mediapipe_detection(image, self.holistic)
+        draw_styled_landmarks(image, results)
 
-                    # Break early if needed
-                    if cv2.waitKey(10) & 0xFF == ord('q'):
-                        break
-    cap.release()
-    cv2.destroyAllWindows()
-    print("Data collection complete.")
+        keypoints = extract_keypoints(results)
+        self.sequence.append(keypoints)
+        self.sequence = self.sequence[-sequence_length:]
 
-# ---------------------------
-# 3. Data Loading and Preprocessing
-# ---------------------------
+        if len(self.sequence) == sequence_length:
+            res = model.predict(np.expand_dims(self.sequence, axis=0))[0]
+            if res[np.argmax(res)] > threshold:
+                self.last_action = actions[np.argmax(res)]
 
-def load_data(DATA_PATH, actions, no_sequences, sequence_length):
-    """Load the saved data into arrays and create labels."""
-    sequences, labels = [], []
-    label_map = {label: num for num, label in enumerate(actions)}
-    for action in actions:
-        for sequence in range(no_sequences):
-            window = []
-            for frame_num in range(sequence_length):
-                res_path = os.path.join(DATA_PATH, action, str(sequence), f"{frame_num}.npy")
-                res = np.load(res_path)
-                window.append(res)
-            sequences.append(window)
-            labels.append(label_map[action])
-    X = np.array(sequences)
-    y = to_categorical(labels).astype(int)
-    return X, y, label_map
+        cv2.rectangle(image, (0, 0), (640, 40), (0, 0, 0), -1)
+        cv2.putText(image, self.last_action, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
+<<<<<<< HEAD
 # ---------------------------
 # 4. Model Training Function
 # ---------------------------
@@ -276,3 +209,10 @@ if __name__ == '_main_':
         else:
             model = load_model(args.model_path)
             real_time_prediction(model, np.array(args.actions), args.sequence_length)
+=======
+        return image
+
+
+st.title("Real-Time Sign Language Detection")
+webrtc_streamer(key="sign-lang", video_transformer_factory=SignLanguageTransformer)
+>>>>>>> 8fcbc16 (yes)
