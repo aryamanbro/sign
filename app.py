@@ -9,8 +9,12 @@ from ccheck import (
     collect_data,
     load_data,
     train_model,
-    real_time_prediction
+    real_time_prediction,
+    KeypointCollector
 )
+create_data_folders(data_path, actions, no_sequences)
+collector = KeypointCollector(data_path, actions, no_sequences, sequence_length)
+
 
 st.set_page_config(layout="wide")
 st.title("🤟 Indian Sign Language Recognition")
@@ -31,10 +35,14 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("📹 Collect Data"):
-        st.success("Starting data collection...")
-        create_data_folders(data_path, np.array(actions), no_sequences)
-        collect_data(data_path, np.array(actions), no_sequences, sequence_length)
-        st.success("✅ Data collection complete.")
+        collector.start_collection(actions.index(selected_action))
+
+        webrtc_streamer(
+            key="collector",
+            video_transformer_factory=lambda: collector,
+            media_stream_constraints={"video": True, "audio": False},
+            async_transform=True,
+        )
 
 with col2:
     if st.button("🧠 Train Model"):
