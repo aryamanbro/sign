@@ -6,7 +6,6 @@ from tensorflow.keras.models import load_model
 from datetime import datetime
 from ccheck import (
     create_data_folders,
-    collect_data,
     load_data,
     train_model,
     real_time_prediction,
