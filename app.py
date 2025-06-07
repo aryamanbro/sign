@@ -53,11 +53,13 @@ with col2:
         st.success("✅ Model training complete and saved.")
 
 with col3:
-    if st.button("🎯 Run Real-Time Prediction"):
+    run_prediction = st.checkbox("🎯 Run Real-Time Prediction")
+    
+    if run_prediction:
         if not os.path.exists(model_path):
             st.error("Trained model not found. Please train the model first.")
         else:
-            st.warning("Opening webcam... Close window or press 'q' to exit prediction.")
+            st.warning("Opening webcam... Close window or stop the stream to exit prediction.")
             model = load_model(model_path)
             real_time_prediction(model, np.array(actions), sequence_length)
             st.success("Prediction session ended.")
