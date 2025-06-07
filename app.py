@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import cv2
 import os
+from streamlit_webrtc import VideoTransformerBase
 from tensorflow.keras.models import load_model
 from datetime import datetime
 from ccheck import (
@@ -11,7 +12,7 @@ from ccheck import (
     real_time_prediction,
     KeypointCollector
 )
-create_data_folders(data_path, actions, no_sequences)
+create_data_folders(MP_Data, actions, no_sequences)
 collector = KeypointCollector(data_path, actions, no_sequences, sequence_length)
 
 
